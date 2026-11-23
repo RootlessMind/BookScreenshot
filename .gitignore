@@ -221,3 +221,60 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ============================================================
+# BookScreenshot - Local application data
+# ============================================================
+
+# Runtime data
+data/
+output/
+captures/
+screenshots/
+exports/
+
+# Generated documents
+*.pdf
+
+# Session and recovery data
+sessions/
+*.session
+*.session.json
+*.autosave
+
+# Local application settings
+config.local.json
+settings.local.json
+user_config.json
+
+# Application logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.old
+
+# Debug and crash reports
+crash_reports/
+*.dmp
+
+# Local development configuration
+.env.*
+!.env.example
+
+# PyInstaller additional output
+/dist/
+/build/
+
+# Windows temporary files
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Windows shortcuts and temporary files
+*.lnk
+*.stackdump
