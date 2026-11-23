@@ -1,0 +1,70 @@
+```toml
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "bookscreenshot"
+version = "0.1.0"
+description = "A customizable screenshot automation tool for capturing pages, organizing batches, and generating PDFs."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "RootlessMind" }
+]
+keywords = [
+    "screenshot",
+    "automation",
+    "pdf",
+    "book-capture",
+    "batch-processing"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics :: Capture",
+    "Topic :: Utilities"
+]
+
+[project.urls]
+Homepage = "https://github.com/RootlessMind/BookScreenshot"
+Repository = "https://github.com/RootlessMind/BookScreenshot"
+Issues = "https://github.com/RootlessMind/BookScreenshot/issues"
+
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.11"
+]
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "UP"
+]
