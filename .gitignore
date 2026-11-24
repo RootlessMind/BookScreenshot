@@ -278,3 +278,6 @@ $RECYCLE.BIN/
 # Windows shortcuts and temporary files
 *.lnk
 *.stackdump
+
+# Runtime configuration
+/config/
