@@ -1,4 +1,5 @@
 """Application logging configuration."""
+
 from __future__ import annotations
 
 import logging
@@ -21,10 +22,12 @@ def configure_logging(paths: AppPaths) -> logging.Logger:
             encoding="utf-8",
         )
         handler._bookscreenshot_handler = True  # type: ignore[attr-defined]
-        handler.setFormatter(logging.Formatter(
-            "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
         logger.addHandler(handler)
 
     return logger
