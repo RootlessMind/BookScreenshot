@@ -1,4 +1,5 @@
 """Versioned JSON configuration with safe writes and legacy preset migration."""
+
 from __future__ import annotations
 
 import json
@@ -28,7 +29,11 @@ DEFAULT_SHORTCUTS: dict[str, Any] = {
     "config_version": CONFIG_VERSION,
     "shortcuts": {
         "capture_current_target": {"enabled": True, "combination": "CTRL+ALT+1", "scope": "global"},
-        "capture_primary_monitor": {"enabled": True, "combination": "CTRL+ALT+2", "scope": "global"},
+        "capture_primary_monitor": {
+            "enabled": True,
+            "combination": "CTRL+ALT+2",
+            "scope": "global",
+        },
         "capture_all_monitors": {"enabled": True, "combination": "CTRL+ALT+3", "scope": "global"},
         "select_region": {"enabled": True, "combination": "CTRL+ALT+4", "scope": "global"},
         "select_window": {"enabled": True, "combination": "CTRL+ALT+5", "scope": "global"},
@@ -44,7 +49,9 @@ class ConfigManager:
         self._ensure_file(paths.settings_file, DEFAULT_SETTINGS)
         self._ensure_file(paths.shortcuts_file, DEFAULT_SHORTCUTS)
         self._migrate_legacy_presets_if_needed()
-        self._ensure_file(paths.profiles_file, {"config_version": CONFIG_VERSION, "custom_profiles": []})
+        self._ensure_file(
+            paths.profiles_file, {"config_version": CONFIG_VERSION, "custom_profiles": []}
+        )
 
     @staticmethod
     def _atomic_write(path: Path, data: Any) -> None:
@@ -110,15 +117,20 @@ class ConfigManager:
         self._atomic_write(self.paths.shortcuts_file, data)
 
     def load_custom_profiles(self) -> list[dict[str, Any]]:
-        data = self.read_json(self.paths.profiles_file, {"config_version": CONFIG_VERSION, "custom_profiles": []})
+        data = self.read_json(
+            self.paths.profiles_file, {"config_version": CONFIG_VERSION, "custom_profiles": []}
+        )
         profiles = data.get("custom_profiles", [])
         return profiles if isinstance(profiles, list) else []
 
     def save_custom_profiles(self, profiles: list[dict[str, Any]]) -> None:
-        self._atomic_write(self.paths.profiles_file, {
-            "config_version": CONFIG_VERSION,
-            "custom_profiles": profiles,
-        })
+        self._atomic_write(
+            self.paths.profiles_file,
+            {
+                "config_version": CONFIG_VERSION,
+                "custom_profiles": profiles,
+            },
+        )
 
     def _migrate_legacy_presets_if_needed(self) -> None:
         if self.paths.profiles_file.exists():
@@ -131,10 +143,13 @@ class ConfigManager:
                 old_data = json.load(handle)
             if not isinstance(old_data, list):
                 raise ValueError("Legacy custom presets must be a JSON list")
-            self._atomic_write(self.paths.profiles_file, {
-                "config_version": CONFIG_VERSION,
-                "custom_profiles": old_data,
-            })
+            self._atomic_write(
+                self.paths.profiles_file,
+                {
+                    "config_version": CONFIG_VERSION,
+                    "custom_profiles": old_data,
+                },
+            )
             LOGGER.info("Migrated %d custom presets from %s", len(old_data), legacy_path)
         except (OSError, json.JSONDecodeError, ValueError):
             LOGGER.exception("Could not migrate legacy custom presets from %s", legacy_path)

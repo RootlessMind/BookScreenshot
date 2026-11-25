@@ -1,16 +1,19 @@
-import os
-import sys
-import time
-import json
 import ctypes
-import re
 import msvcrt
+import os
+import re
+import time
 from datetime import datetime
+
+from .config_manager import ConfigManager
+from .logging_manager import configure_logging
+from .paths import ensure_app_directories, get_app_paths
 
 # ============================================================
 # WINDOWS DPI AWARENESS
 # Must be set before importing PyAutoGUI.
 # ============================================================
+
 
 def enable_dpi_awareness():
     try:
@@ -29,11 +32,9 @@ def enable_dpi_awareness():
 
 enable_dpi_awareness()
 
-import pyautogui
-from PIL import Image
-from pynput import keyboard, mouse
-import img2pdf
-
+import img2pdf  # noqa: E402
+import pyautogui  # noqa: E402
+from pynput import keyboard, mouse  # noqa: E402
 
 # ============================================================
 # GENERAL SETTINGS
@@ -56,9 +57,6 @@ pyautogui.PAUSE = 0
 # PATHS / CONFIGURATION / LOGGING
 # ============================================================
 
-from .config_manager import ConfigManager
-from .logging_manager import configure_logging
-from .paths import ensure_app_directories, get_app_paths
 
 APP_PATHS = get_app_paths()
 ensure_app_directories(APP_PATHS)
@@ -74,6 +72,7 @@ CAPTURES_DIR = str(APP_PATHS.captures)
 # ============================================================
 # WINDOWS HELPERS
 # ============================================================
+
 
 def get_screen_info():
     width, height = pyautogui.size()
@@ -111,6 +110,7 @@ def bring_reader_to_front(activation_point):
     x, y = activation_point
 
     try:
+
         class POINT(ctypes.Structure):
             _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
@@ -143,6 +143,7 @@ def bring_reader_to_front(activation_point):
 # COORDINATE HELPERS
 # ============================================================
 
+
 def scale_point(point, factor):
     return (round(point[0] * factor), round(point[1] * factor))
 
@@ -154,17 +155,13 @@ def scale_rectangle(rectangle, factor):
 def full_page_crop(width, height, base_width, base_height):
     """Scale the 23px top and 50px bottom margins from the base profile."""
     factor = width / base_width
-    return (
-        0,
-        round(23 * factor),
-        width,
-        height - round(50 * factor)
-    )
+    return (0, round(23 * factor), width, height - round(50 * factor))
 
 
 # ============================================================
 # PRESET FACTORIES
 # ============================================================
+
 
 def fidibo_landscape(width, height, label):
     factor = width / 1920
@@ -259,13 +256,10 @@ def build_presets():
     ]
 
     for width, height, label in landscape_sizes:
-        presets[(width, height)] = (
-            fidibo_landscape(width, height, label)
-            + [
-                taaghche_landscape(width, height, label),
-                taaghche_text_landscape(width, height, label),
-            ]
-        )
+        presets[(width, height)] = fidibo_landscape(width, height, label) + [
+            taaghche_landscape(width, height, label),
+            taaghche_text_landscape(width, height, label),
+        ]
 
     for width, height, label in portrait_sizes:
         presets[(width, height)] = [
@@ -282,6 +276,7 @@ PRESETS = build_presets()
 # ============================================================
 # CUSTOM PRESET STORAGE
 # ============================================================
+
 
 def load_custom_presets():
     """Load user profiles from the centralized, versioned config store."""
@@ -306,6 +301,7 @@ def clean_name(name):
 # ============================================================
 # INPUT HELPERS
 # ============================================================
+
 
 def ask_int(prompt, minimum=0, default=None):
     while True:
@@ -353,9 +349,7 @@ def ask_point(prompt):
 
 def ask_delay_ms(default=DEFAULT_DELAY_MS):
     while True:
-        value = input(
-            f"Page-turn delay in milliseconds [{default}]: "
-        ).strip()
+        value = input(f"Page-turn delay in milliseconds [{default}]: ").strip()
 
         if not value:
             return default
@@ -373,6 +367,7 @@ def ask_delay_ms(default=DEFAULT_DELAY_MS):
 # ============================================================
 # CALIBRATION
 # ============================================================
+
 
 def capture_mouse_click(instruction):
     """Wait for a left click, then bring the console back to the foreground."""
@@ -422,26 +417,18 @@ def calibrate_profile(name, reader, width, height, delay_ms):
         top_left = ask_point("Crop top-left X,Y: ")
         bottom_right = ask_point("Crop bottom-right X,Y: ")
     else:
-        top_left = capture_mouse_click(
-            "1/4: Click the TOP-LEFT corner of the crop area."
-        )
-        bottom_right = capture_mouse_click(
-            "2/4: Click the BOTTOM-RIGHT corner of the crop area."
-        )
+        top_left = capture_mouse_click("1/4: Click the TOP-LEFT corner of the crop area.")
+        bottom_right = capture_mouse_click("2/4: Click the BOTTOM-RIGHT corner of the crop area.")
         activate = capture_mouse_click(
             "3/4: Click inside the reader window where it can be activated."
         )
-        turn = capture_mouse_click(
-            "4/4: Click the next-page button."
-        )
+        turn = capture_mouse_click("4/4: Click the next-page button.")
 
     left, top = top_left
     right, bottom = bottom_right
 
     if not (0 <= left < right <= width and 0 <= top < bottom <= height):
-        raise ValueError(
-            "Invalid crop rectangle. Check top-left and bottom-right points."
-        )
+        raise ValueError("Invalid crop rectangle. Check top-left and bottom-right points.")
 
     for label, point in (("Page-turn", turn), ("Activation", activate)):
         if not (0 <= point[0] < width and 0 <= point[1] < height):
@@ -470,8 +457,10 @@ def validate_profile(profile, width, height):
         left, top, right, bottom = crop
 
         return (
-            0 <= turn[0] < width and 0 <= turn[1] < height
-            and 0 <= activate[0] < width and 0 <= activate[1] < height
+            0 <= turn[0] < width
+            and 0 <= turn[1] < height
+            and 0 <= activate[0] < width
+            and 0 <= activate[1] < height
             and 0 <= left < right <= width
             and 0 <= top < bottom <= height
         )
@@ -491,6 +480,7 @@ def show_profile(profile):
 # ============================================================
 # PRESET SELECTION / RE-CALIBRATION
 # ============================================================
+
 
 def choose_profile(width, height):
     custom_presets = load_custom_presets()
@@ -533,9 +523,7 @@ def choose_profile(width, height):
             delay = ask_delay_ms(DEFAULT_DELAY_MS)
 
             try:
-                profile = calibrate_profile(
-                    name, reader, width, height, delay
-                )
+                profile = calibrate_profile(name, reader, width, height, delay)
             except Exception as exc:
                 print(f"\nCalibration failed: {exc}")
                 input("Press Enter to return to the menu...")
@@ -564,9 +552,7 @@ def choose_profile(width, height):
             delay = int(profile.get("delay_ms", DEFAULT_DELAY_MS))
 
             try:
-                updated = calibrate_profile(
-                    name, reader, width, height, delay
-                )
+                updated = calibrate_profile(name, reader, width, height, delay)
             except Exception as exc:
                 print(f"\nCalibration failed: {exc}")
                 input("Press Enter to return to the menu...")
@@ -597,6 +583,7 @@ def choose_profile(width, height):
 # IMAGE OUTPUT SETTINGS
 # ============================================================
 
+
 def choose_image_format():
     print("\nIMAGE FORMAT")
     print("1. PNG - lossless, larger files")
@@ -621,10 +608,13 @@ def choose_image_format():
     print("5. 80  - smaller files")
 
     qualities = {"1": 100, "2": 95, "3": 90, "4": 85, "5": 80}
-    default_quality_choice = min(qualities, key=lambda key: abs(qualities[key] - JPEG_QUALITY_DEFAULT))
-    quality_choice = input(
-        f"Choose quality [1-5] (default {default_quality_choice}): "
-    ).strip() or default_quality_choice
+    default_quality_choice = min(
+        qualities, key=lambda key: abs(qualities[key] - JPEG_QUALITY_DEFAULT)
+    )
+    quality_choice = (
+        input(f"Choose quality [1-5] (default {default_quality_choice}): ").strip()
+        or default_quality_choice
+    )
 
     if quality_choice not in qualities:
         print(f"Invalid choice. Using JPEG {JPEG_QUALITY_DEFAULT}.")
@@ -636,6 +626,7 @@ def choose_image_format():
 # ============================================================
 # UNIQUE NAMES / CAPTURE FOLDERS
 # ============================================================
+
 
 def unique_directory(parent, base_name):
     candidate = os.path.join(parent, base_name)
@@ -665,6 +656,7 @@ def unique_file_path(folder, filename):
 # MOUSE CLICK
 # ============================================================
 
+
 def safe_click(x, y):
     """
     Click at a screen point and restore the cursor to where it was.
@@ -687,6 +679,7 @@ def safe_click(x, y):
 # ============================================================
 # PDF CREATION
 # ============================================================
+
 
 def create_pdf(image_paths, pdf_path):
     LOGGER.info("PDF generation requested: %s (%d images)", pdf_path, len(image_paths))
@@ -712,8 +705,11 @@ def create_pdf(image_paths, pdf_path):
 # CAPTURE SESSION
 # ============================================================
 
+
 def run_capture(profile, width, height):
-    LOGGER.info("Capture requested: profile=%s resolution=%sx%s", profile.get("name"), width, height)
+    LOGGER.info(
+        "Capture requested: profile=%s resolution=%sx%s", profile.get("name"), width, height
+    )
     print("\nCAPTURE SETTINGS")
     show_profile(profile)
 
@@ -721,21 +717,15 @@ def run_capture(profile, width, height):
 
     default_pause = int(APP_SETTINGS.get("default_pause_after", 0))
     pause_after = ask_int(
-        f"Pause after how many screenshots? (0 = disabled) [{default_pause}]: ",
-        0,
-        default_pause
+        f"Pause after how many screenshots? (0 = disabled) [{default_pause}]: ", 0, default_pause
     )
 
-    delay_ms = ask_delay_ms(
-        int(profile.get("delay_ms", DEFAULT_DELAY_MS))
-    )
+    delay_ms = ask_delay_ms(int(profile.get("delay_ms", DEFAULT_DELAY_MS)))
 
     image_format, jpeg_quality = choose_image_format()
 
     default_name = datetime.now().strftime("Capture_%Y%m%d_%H%M%S")
-    session_name = input(
-        f"\nName for this capture [{default_name}]: "
-    ).strip() or default_name
+    session_name = input(f"\nName for this capture [{default_name}]: ").strip() or default_name
     session_name = clean_name(session_name)
 
     os.makedirs(CAPTURES_DIR, exist_ok=True)
@@ -744,7 +734,13 @@ def run_capture(profile, width, height):
     extension = ".png" if image_format == "PNG" else ".jpg"
     image_paths = []
 
-    LOGGER.info("Capture initialized: pages=%d delay_ms=%d format=%s output=%s", total_pages, delay_ms, image_format, session_dir)
+    LOGGER.info(
+        "Capture initialized: pages=%d delay_ms=%d format=%s output=%s",
+        total_pages,
+        delay_ms,
+        image_format,
+        session_dir,
+    )
     print("\n" + "=" * 54)
     print("READY TO CAPTURE")
     print("=" * 54)
@@ -794,19 +790,13 @@ def run_capture(profile, width, height):
 
                 cropped = screenshot.crop((left, top, right, bottom))
 
-                filename = os.path.join(
-                    session_dir,
-                    f"page_{page_number:04d}{extension}"
-                )
+                filename = os.path.join(session_dir, f"page_{page_number:04d}{extension}")
 
                 if image_format == "PNG":
                     cropped.save(filename, "PNG", optimize=True)
                 else:
                     cropped.convert("RGB").save(
-                        filename,
-                        "JPEG",
-                        quality=jpeg_quality,
-                        optimize=True
+                        filename, "JPEG", quality=jpeg_quality, optimize=True
                     )
 
                 image_paths.append(filename)
@@ -875,7 +865,9 @@ def run_capture(profile, width, height):
         escape_listener.stop()
         escape_listener.join(timeout=1)
 
-    LOGGER.info("Capture finished: %d/%d screenshots in %s", len(image_paths), total_pages, session_dir)
+    LOGGER.info(
+        "Capture finished: %d/%d screenshots in %s", len(image_paths), total_pages, session_dir
+    )
     print("\n" + "=" * 54)
     print("CAPTURE SESSION FINISHED")
     print(f"Screenshots captured: {len(image_paths)}")
@@ -890,16 +882,12 @@ def run_capture(profile, width, height):
         "\nCreate a PDF from these screenshots?",
         default=bool(APP_SETTINGS.get("create_pdf", True)),
     ):
-        requested_pdf_name = input(
-            f"PDF filename [{session_name}.pdf]: "
-        ).strip()
+        requested_pdf_name = input(f"PDF filename [{session_name}.pdf]: ").strip()
 
         if not requested_pdf_name:
             requested_pdf_name = session_name + ".pdf"
 
-        requested_pdf_name = clean_name(
-            os.path.splitext(requested_pdf_name)[0]
-        ) + ".pdf"
+        requested_pdf_name = clean_name(os.path.splitext(requested_pdf_name)[0]) + ".pdf"
 
         pdf_path = unique_file_path(session_dir, requested_pdf_name)
         pdf_created = create_pdf(image_paths, pdf_path)
@@ -907,7 +895,7 @@ def run_capture(profile, width, height):
         if pdf_created:
             keep_images = ask_yes_no(
                 "Keep the original screenshot files?",
-                default=bool(APP_SETTINGS.get("keep_screenshots", True))
+                default=bool(APP_SETTINGS.get("keep_screenshots", True)),
             )
 
             if not keep_images:
@@ -930,6 +918,7 @@ def run_capture(profile, width, height):
 # ============================================================
 # MAIN MENU
 # ============================================================
+
 
 def main():
     os.makedirs(CAPTURES_DIR, exist_ok=True)
@@ -976,5 +965,3 @@ def main():
             print(f"\nUnexpected error: {exc}")
 
         input("\nPress ENTER to return to the main menu...")
-
-

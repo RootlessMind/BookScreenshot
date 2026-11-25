@@ -1,4 +1,5 @@
 """Centralized application paths for portable and source runs."""
+
 from __future__ import annotations
 
 import sys

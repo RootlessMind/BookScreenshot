@@ -44,14 +44,24 @@ def test_saves_and_reloads_settings(tmp_path):
 
 def test_saves_custom_profiles(tmp_path):
     manager = ConfigManager(make_paths(tmp_path))
-    profiles = [{"name": "My reader", "turn": [10, 20], "activate": [30, 40], "crop": [0, 0, 100, 100]}]
+    profiles = [
+        {"name": "My reader", "turn": [10, 20], "activate": [30, 40], "crop": [0, 0, 100, 100]}
+    ]
     manager.save_custom_profiles(profiles)
 
     assert manager.load_custom_profiles() == profiles
 
 
 def test_migrates_legacy_custom_presets(tmp_path):
-    legacy = [{"name": "Old profile", "reader": "Custom", "turn": [1, 2], "activate": [3, 4], "crop": [0, 0, 10, 10]}]
+    legacy = [
+        {
+            "name": "Old profile",
+            "reader": "Custom",
+            "turn": [1, 2],
+            "activate": [3, 4],
+            "crop": [0, 0, 10, 10],
+        }
+    ]
     (tmp_path / "custom_presets.json").write_text(json.dumps(legacy), encoding="utf-8")
 
     manager = ConfigManager(make_paths(tmp_path))
