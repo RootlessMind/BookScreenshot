@@ -1,4 +1,5 @@
 # BookScreenshot
+[![Version](https://img.shields.io/badge/version-0.1.0%20Alpha-blue)](https://github.com/RootlessMind/BookScreenshot/releases/tag/v0.1.0)
 
 **A customizable screenshot automation tool for capturing pages, organizing batches, and generating PDFs.**
 
