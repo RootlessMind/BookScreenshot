@@ -7,7 +7,7 @@ from datetime import datetime
 
 from .config_manager import ConfigManager
 from .logging_manager import configure_logging
-from .paths import ensure_app_directories, get_app_paths
+from .paths import get_app_paths
 
 # ============================================================
 # WINDOWS DPI AWARENESS
@@ -59,7 +59,6 @@ pyautogui.PAUSE = 0
 
 
 APP_PATHS = get_app_paths()
-ensure_app_directories(APP_PATHS)
 CONFIG = ConfigManager(APP_PATHS)
 LOGGER = configure_logging(APP_PATHS)
 APP_SETTINGS = CONFIG.load_settings()
@@ -94,15 +93,50 @@ def get_console_window():
 
 
 def bring_console_to_front():
+    """Restore and foreground the console, including after another app was clicked."""
     hwnd = get_console_window()
-    if hwnd:
-        try:
-            SW_RESTORE = 9
-            ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
-            ctypes.windll.user32.BringWindowToTop(hwnd)
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
-        except Exception:
-            pass
+    if not hwnd:
+        return False
+
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    attached_threads = []
+
+    try:
+        SW_RESTORE = 9
+        user32.ShowWindow(hwnd, SW_RESTORE)
+
+        current_thread = kernel32.GetCurrentThreadId()
+        foreground_hwnd = user32.GetForegroundWindow()
+        foreground_thread = (
+            user32.GetWindowThreadProcessId(foreground_hwnd, None) if foreground_hwnd else 0
+        )
+        console_thread = user32.GetWindowThreadProcessId(hwnd, None)
+
+        # Windows may reject SetForegroundWindow when the user just clicked
+        # another application. Temporarily attach the input queues so the
+        # console can be activated reliably, then detach them again.
+        for thread_id in {foreground_thread, console_thread}:
+            if thread_id and thread_id != current_thread:
+                if user32.AttachThreadInput(current_thread, thread_id, True):
+                    attached_threads.append(thread_id)
+
+        user32.BringWindowToTop(hwnd)
+        user32.SetForegroundWindow(hwnd)
+        user32.SetActiveWindow(hwnd)
+        user32.SetFocus(hwnd)
+        time.sleep(0.1)
+        return user32.GetForegroundWindow() == hwnd
+    except Exception as exc:
+        LOGGER.debug("Could not restore console focus: %s", exc)
+        return False
+    finally:
+        current_thread = kernel32.GetCurrentThreadId()
+        for thread_id in reversed(attached_threads):
+            try:
+                user32.AttachThreadInput(current_thread, thread_id, False)
+            except Exception:
+                pass
 
 
 def bring_reader_to_front(activation_point):
@@ -303,9 +337,15 @@ def clean_name(name):
 # ============================================================
 
 
-def ask_int(prompt, minimum=0, default=None):
+def ask_int(prompt, minimum=0, default=None, allow_escape=False):
     while True:
-        raw = input(prompt).strip()
+        if allow_escape:
+            raw = read_console_input(prompt)
+            if raw is None:
+                return None
+            raw = raw.strip()
+        else:
+            raw = input(prompt).strip()
 
         if raw == "" and default is not None:
             return default
@@ -336,9 +376,37 @@ def ask_yes_no(prompt, default=True):
         print("Please answer Y or N.")
 
 
+def read_console_input(prompt):
+    """Read a console line while allowing ESC to cancel the current step."""
+    print(prompt, end="", flush=True)
+    characters = []
+
+    while True:
+        char = msvcrt.getwch()
+
+        if char == "\x1b":
+            print()
+            return None
+        if char in ("\r", "\n"):
+            print()
+            return "".join(characters)
+        if char == "\x03":
+            raise KeyboardInterrupt
+        if char == "\b":
+            if characters:
+                characters.pop()
+                print("\b \b", end="", flush=True)
+            continue
+        if char.isprintable():
+            characters.append(char)
+            print(char, end="", flush=True)
+
+
 def ask_point(prompt):
     while True:
-        raw = input(prompt).strip()
+        raw = read_console_input(prompt)
+        if raw is None:
+            return None
 
         try:
             x_text, y_text = raw.replace(" ", "").split(",")
@@ -347,9 +415,16 @@ def ask_point(prompt):
             print("Enter coordinates as X,Y (for example: 100,200).")
 
 
-def ask_delay_ms(default=DEFAULT_DELAY_MS):
+def ask_delay_ms(default=DEFAULT_DELAY_MS, allow_escape=False):
     while True:
-        value = input(f"Page-turn delay in milliseconds [{default}]: ").strip()
+        prompt = f"Page-turn delay in milliseconds [{default}]: "
+        if allow_escape:
+            raw = read_console_input(prompt)
+            if raw is None:
+                return None
+            value = raw.strip()
+        else:
+            value = input(prompt).strip()
 
         if not value:
             return default
@@ -370,30 +445,54 @@ def ask_delay_ms(default=DEFAULT_DELAY_MS):
 
 
 def capture_mouse_click(instruction):
-    """Wait for a left click, then bring the console back to the foreground."""
+    """Wait for a left click, or return None when ESC is pressed."""
     result = {}
 
     bring_console_to_front()
     print("\n" + instruction)
-    print("Click once with the LEFT mouse button.")
+    print("Click once with the LEFT mouse button. Press ESC to go back.")
 
     def on_click(x, y, button, pressed):
         if pressed and button == mouse.Button.left:
             result["point"] = (round(x), round(y))
             return False
 
-    listener = mouse.Listener(on_click=on_click)
-    listener.start()
+    def on_key_press(key):
+        if key == keyboard.Key.esc:
+            result["cancelled"] = True
+            return False
+
+    mouse_listener = mouse.Listener(on_click=on_click)
+    keyboard_listener = keyboard.Listener(on_press=on_key_press)
+    mouse_listener.start()
+    keyboard_listener.start()
 
     try:
-        while listener.is_alive() and "point" not in result:
+        while (
+            mouse_listener.is_alive()
+            and keyboard_listener.is_alive()
+            and "point" not in result
+            and not result.get("cancelled")
+        ):
             time.sleep(0.05)
     finally:
-        listener.stop()
-        listener.join(timeout=1)
+        mouse_listener.stop()
+        keyboard_listener.stop()
+        mouse_listener.join(timeout=1)
+        keyboard_listener.join(timeout=1)
 
     bring_console_to_front()
     time.sleep(0.2)
+
+    if result.get("cancelled"):
+        # pynput detects ESC globally, but Windows also leaves the key in the
+        # console input buffer. Clear it so the next prompt does not treat the
+        # same ESC press as a second cancellation.
+        while msvcrt.kbhit():
+            msvcrt.getwch()
+
+        print("\nReturning to the previous calibration step...")
+        return None
 
     point = result["point"]
     print(f"Recorded: {point[0]}, {point[1]}")
@@ -401,28 +500,72 @@ def capture_mouse_click(instruction):
 
 
 def calibrate_profile(name, reader, width, height, delay_ms):
-    print("\nCUSTOM COORDINATE CALIBRATION")
-    print("----------------------------------------")
-    print("The console will return to the foreground after each click.")
+    while True:
+        print("\nCUSTOM COORDINATE CALIBRATION")
+        print("----------------------------------------")
+        print("The console will return to the foreground after each click.")
 
-    print("\nChoose calibration method:")
-    print("1. Click the requested locations")
-    print("2. Type coordinates manually")
+        print("\nChoose calibration method:")
+        print("1. Click the requested locations")
+        print("2. Type coordinates manually")
+        print("Press ESC to return to the configuration menu.")
 
-    method = input("Select [1/2] (default 1): ").strip() or "1"
+        method_input = read_console_input("Select [1/2] (default 1): ")
+        if method_input is None:
+            return None
 
-    if method == "2":
-        turn = ask_point("Page-turn button X,Y: ")
-        activate = ask_point("Window activation point X,Y: ")
-        top_left = ask_point("Crop top-left X,Y: ")
-        bottom_right = ask_point("Crop bottom-right X,Y: ")
-    else:
-        top_left = capture_mouse_click("1/4: Click the TOP-LEFT corner of the crop area.")
-        bottom_right = capture_mouse_click("2/4: Click the BOTTOM-RIGHT corner of the crop area.")
-        activate = capture_mouse_click(
-            "3/4: Click inside the reader window where it can be activated."
-        )
-        turn = capture_mouse_click("4/4: Click the next-page button.")
+        method = method_input.strip() or "1"
+        if method not in ("1", "2"):
+            print("Please choose 1 or 2.")
+            continue
+
+        if method == "2":
+            steps = [
+                ("turn", "Page-turn button X,Y: ", "point"),
+                ("activate", "Window activation point X,Y: ", "point"),
+                ("top_left", "Crop top-left X,Y: ", "point"),
+                ("bottom_right", "Crop bottom-right X,Y: ", "point"),
+            ]
+        else:
+            steps = [
+                ("top_left", "1/4: Click the TOP-LEFT corner of the crop area.", "click"),
+                ("bottom_right", "2/4: Click the BOTTOM-RIGHT corner of the crop area.", "click"),
+                (
+                    "activate",
+                    "3/4: Click inside the reader window where it can be activated.",
+                    "click",
+                ),
+                ("turn", "4/4: Click the next-page button.", "click"),
+            ]
+
+        coordinates = {}
+        step_index = 0
+        while step_index < len(steps):
+            key, prompt, input_kind = steps[step_index]
+            if input_kind == "point":
+                point = ask_point(prompt)
+            else:
+                point = capture_mouse_click(prompt)
+
+            if point is None:
+                if step_index == 0:
+                    print("Returning to calibration method selection...")
+                    break
+                coordinates.pop(steps[step_index - 1][0], None)
+                step_index -= 1
+                continue
+
+            coordinates[key] = point
+            step_index += 1
+
+        if step_index < len(steps):
+            continue
+
+        turn = coordinates["turn"]
+        activate = coordinates["activate"]
+        top_left = coordinates["top_left"]
+        bottom_right = coordinates["bottom_right"]
+        break
 
     left, top = top_left
     right, bottom = bottom_right
@@ -442,7 +585,114 @@ def calibrate_profile(name, reader, width, height, delay_ms):
         "crop": [left, top, right, bottom],
         "delay_ms": delay_ms,
         "custom": True,
+        "calibration_method": "manual" if method == "2" else "click",
     }
+
+
+def recalibrate_profile_from_end(profile, width, height):
+    """Recalibrate coordinates with ESC moving backward through setup."""
+    method = profile.get("calibration_method")
+
+    def coordinate_order(selected_method):
+        if selected_method == "click":
+            return ["top_left", "bottom_right", "activate", "turn"]
+        return ["turn", "activate", "top_left", "bottom_right"]
+
+    def read_coordinate(key, selected_method):
+        prompts = {
+            "top_left": "1/4: Click the TOP-LEFT corner of the crop area.",
+            "bottom_right": "2/4: Click the BOTTOM-RIGHT corner of the crop area.",
+            "activate": "3/4: Click inside the reader window where it can be activated.",
+            "turn": "4/4: Click the next-page button.",
+        }
+        if selected_method == "click":
+            return capture_mouse_click(prompts[key])
+
+        manual_prompts = {
+            "turn": "Page-turn button X,Y: ",
+            "activate": "Window activation point X,Y: ",
+            "top_left": "Crop top-left X,Y: ",
+            "bottom_right": "Crop bottom-right X,Y: ",
+        }
+        return ask_point(manual_prompts[key])
+
+    def store_coordinate(key, point):
+        if key == "top_left":
+            profile["crop"] = [point[0], point[1], profile["crop"][2], profile["crop"][3]]
+        elif key == "bottom_right":
+            profile["crop"] = [profile["crop"][0], profile["crop"][1], point[0], point[1]]
+        else:
+            profile[key] = list(point)
+
+    while method not in ("click", "manual"):
+        print("\nChoose calibration method:")
+        print("1. Click the requested locations")
+        print("2. Type coordinates manually")
+        print("Press ESC to return to reader configurations.")
+        choice = read_console_input("Select [1/2]: ")
+        bring_console_to_front()
+        if choice is None:
+            return False
+        choice = choice.strip()
+        if choice == "1":
+            method = "click"
+        elif choice == "2":
+            method = "manual"
+        else:
+            print("Please choose 1 or 2.")
+
+    order = coordinate_order(method)
+    index = len(order) - 1
+    print("\nReturning to the final coordinate-recording step.")
+
+    while True:
+        key = order[index]
+        point = read_coordinate(key, method)
+        bring_console_to_front()
+        time.sleep(0.25)
+
+        if point is None:
+            if index > 0:
+                index -= 1
+                print("\nReturning to the previous coordinate-recording step...")
+                continue
+
+            print("\nChoose calibration method:")
+            print("1. Click the requested locations")
+            print("2. Type coordinates manually")
+            print("Press ESC to return to reader configurations.")
+            choice = read_console_input("Select [1/2]: ")
+            bring_console_to_front()
+            if choice is None:
+                return False
+            choice = choice.strip()
+            if choice == "1":
+                method = "click"
+            elif choice == "2":
+                method = "manual"
+            else:
+                print("Please choose 1 or 2.")
+                continue
+            order = coordinate_order(method)
+            index = 0
+            print("\nStarting coordinate recording from step 1.")
+            continue
+
+        store_coordinate(key, point)
+        if index < len(order) - 1:
+            index += 1
+            continue
+
+        if validate_profile(profile, width, height):
+            profile["calibration_method"] = method
+            bring_console_to_front()
+            time.sleep(0.2)
+            bring_console_to_front()
+            print("\nCoordinates updated. Returning to page-count entry.")
+            return True
+
+        print("\nThe coordinates are invalid. Re-record the final coordinate or go back.")
+        index = len(order) - 1
 
 
 def validate_profile(profile, width, height):
@@ -507,11 +757,11 @@ def choose_profile(width, height):
 
         create_number = len(options) + 1
         print(f"\n{create_number}. Create a new custom configuration")
-        print("0. Exit")
+        print("0. Back")
 
-        choice = ask_int("\nChoose an option: ", 0, None)
+        choice = ask_int("\nChoose an option (ESC to return to main menu): ", 0, None, True)
 
-        if choice == 0:
+        if choice is None or choice == 0:
             return None
 
         if choice == create_number:
@@ -527,6 +777,9 @@ def choose_profile(width, height):
             except Exception as exc:
                 print(f"\nCalibration failed: {exc}")
                 input("Press Enter to return to the menu...")
+                continue
+
+            if profile is None:
                 continue
 
             custom_presets.append(profile)
@@ -558,6 +811,9 @@ def choose_profile(width, height):
                 input("Press Enter to return to the menu...")
                 continue
 
+            if updated is None:
+                continue
+
             if kind == "custom":
                 original_name = selected.get("name")
                 for index, item in enumerate(custom_presets):
@@ -584,22 +840,28 @@ def choose_profile(width, height):
 # ============================================================
 
 
-def choose_image_format():
+def choose_image_format(current=None):
     print("\nIMAGE FORMAT")
     print("1. PNG - lossless, larger files")
     print("2. JPEG - compressed, smaller files")
 
     configured_format = str(APP_SETTINGS.get("default_image_format", "JPEG")).upper()
-    default_choice = "1" if configured_format == "PNG" else "2"
-    choice = input(f"Choose format [1/2] (default {default_choice}): ").strip() or default_choice
+    default_choice = "1" if (current or configured_format) == "PNG" else "2"
+    choice = read_console_input(f"Choose format [1/2] (default {default_choice}): ")
+    if choice is None:
+        return None
+    choice = choice.strip() or default_choice
 
     if choice == "1":
-        return "PNG", None
+        return "PNG"
+    if choice == "2":
+        return "JPEG"
 
-    if choice != "2":
-        print("Invalid choice. Using JPEG.")
-        return "JPEG", 95
+    print("Please choose 1 or 2.")
+    return choose_image_format(current)
 
+
+def choose_jpeg_quality(current=None):
     print("\nJPEG quality:")
     print("1. 100 - maximum quality")
     print("2. 95  - very high quality")
@@ -609,18 +871,16 @@ def choose_image_format():
 
     qualities = {"1": 100, "2": 95, "3": 90, "4": 85, "5": 80}
     default_quality_choice = min(
-        qualities, key=lambda key: abs(qualities[key] - JPEG_QUALITY_DEFAULT)
+        qualities, key=lambda key: abs(qualities[key] - (current or JPEG_QUALITY_DEFAULT))
     )
-    quality_choice = (
-        input(f"Choose quality [1-5] (default {default_quality_choice}): ").strip()
-        or default_quality_choice
-    )
-
-    if quality_choice not in qualities:
-        print(f"Invalid choice. Using JPEG {JPEG_QUALITY_DEFAULT}.")
-        quality_choice = default_quality_choice
-
-    return "JPEG", qualities[quality_choice]
+    choice = read_console_input(f"Choose quality [1-5] (default {default_quality_choice}): ")
+    if choice is None:
+        return None
+    choice = choice.strip() or default_quality_choice
+    if choice not in qualities:
+        print("Please choose a quality from 1 to 5.")
+        return choose_jpeg_quality(current)
+    return qualities[choice]
 
 
 # ============================================================
@@ -701,6 +961,39 @@ def create_pdf(image_paths, pdf_path):
         return False
 
 
+def delete_screenshots(image_paths, session_dir):
+    """Delete captured images and remove their session folder if it is empty."""
+    failed = []
+
+    for path in image_paths:
+        try:
+            os.remove(path)
+            LOGGER.info("Deleted screenshot: %s", path)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            failed.append((path, exc))
+            LOGGER.exception("Could not delete screenshot %s: %s", path, exc)
+
+    if failed:
+        print(f"Could not delete {len(failed)} screenshot file(s).")
+        for path, exc in failed:
+            print(f"  {path}: {exc}")
+        return False
+
+    try:
+        os.rmdir(session_dir)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        LOGGER.warning("Screenshots deleted, but session folder was retained: %s", exc)
+        print("Screenshots deleted, but the session folder could not be removed.")
+    else:
+        LOGGER.info("Removed empty capture session folder: %s", session_dir)
+
+    return True
+
+
 # ============================================================
 # CAPTURE SESSION
 # ============================================================
@@ -713,24 +1006,104 @@ def run_capture(profile, width, height):
     print("\nCAPTURE SETTINGS")
     show_profile(profile)
 
-    total_pages = ask_int("\nHow many pages should be captured? ", 1)
-
     default_pause = int(APP_SETTINGS.get("default_pause_after", 0))
-    pause_after = ask_int(
-        f"Pause after how many screenshots? (0 = disabled) [{default_pause}]: ", 0, default_pause
-    )
-
-    delay_ms = ask_delay_ms(int(profile.get("delay_ms", DEFAULT_DELAY_MS)))
-
-    image_format, jpeg_quality = choose_image_format()
-
     default_name = datetime.now().strftime("Capture_%Y%m%d_%H%M%S")
-    session_name = input(f"\nName for this capture [{default_name}]: ").strip() or default_name
-    session_name = clean_name(session_name)
+    total_pages = None
+    pause_after = default_pause
+    delay_ms = int(profile.get("delay_ms", DEFAULT_DELAY_MS))
+    image_format = str(APP_SETTINGS.get("default_image_format", "JPEG")).upper()
+    if image_format not in ("PNG", "JPEG"):
+        image_format = "JPEG"
+    jpeg_quality = JPEG_QUALITY_DEFAULT
+    session_name = default_name
+
+    # Each ESC moves back exactly one setup step. Page-count ESC retains its
+    # special coordinate-recalibration behavior.
+    step = 0
+    while step < 7:
+        if step == 0:
+            value = ask_int(
+                (
+                    "\nHow many pages should be captured? "
+                    "(Press ESC to re-record the final coordinate) "
+                ),
+                1,
+                allow_escape=True,
+            )
+            if value is None:
+                if not recalibrate_profile_from_end(profile, width, height):
+                    return "reader_config"
+                bring_console_to_front()
+                time.sleep(0.2)
+                continue
+            total_pages = value
+            step = 1
+
+        elif step == 1:
+            value = ask_int(
+                f"Pause after how many screenshots? (0 = disabled) [{default_pause}]: ",
+                0,
+                default_pause,
+                allow_escape=True,
+            )
+            if value is None:
+                step = 0
+            else:
+                pause_after = value
+                step = 2
+
+        elif step == 2:
+            value = ask_delay_ms(delay_ms, allow_escape=True)
+            if value is None:
+                step = 1
+            else:
+                delay_ms = value
+                step = 3
+
+        elif step == 3:
+            value = choose_image_format(image_format)
+            if value is None:
+                step = 2
+            else:
+                image_format = value
+                step = 4 if image_format == "JPEG" else 5
+
+        elif step == 4:
+            value = choose_jpeg_quality(jpeg_quality)
+            if value is None:
+                step = 3
+            else:
+                jpeg_quality = value
+                step = 5
+
+        elif step == 5:
+            raw_name = read_console_input(f"\nName for this capture [{session_name}]: ")
+            if raw_name is None:
+                step = 4 if image_format == "JPEG" else 3
+            else:
+                session_name = clean_name(raw_name.strip() or session_name)
+                step = 6
+
+        elif step == 6:
+            print("\n" + "=" * 54)
+            print("READY TO CAPTURE")
+            print("=" * 54)
+            print(f"Pages: {total_pages}")
+            print(f"Pause after: {pause_after}")
+            print(f"Delay: {delay_ms} ms")
+            print(f"Format: {image_format}")
+            if image_format == "JPEG":
+                print(f"JPEG quality: {jpeg_quality}")
+            print(f"Output folder: {os.path.join(CAPTURES_DIR, session_name)}")
+            print("\nPress ESC to go back and change settings.")
+            confirmation = read_console_input("Position the reader and press ENTER to start... ")
+            if confirmation is None:
+                step = 5
+            else:
+                break
 
     os.makedirs(CAPTURES_DIR, exist_ok=True)
     session_dir = unique_directory(CAPTURES_DIR, session_name)
-
     extension = ".png" if image_format == "PNG" else ".jpg"
     image_paths = []
 
@@ -741,18 +1114,6 @@ def run_capture(profile, width, height):
         image_format,
         session_dir,
     )
-    print("\n" + "=" * 54)
-    print("READY TO CAPTURE")
-    print("=" * 54)
-    print(f"Pages: {total_pages}")
-    print(f"Pause after: {pause_after}")
-    print(f"Delay: {delay_ms} ms")
-    print(f"Format: {image_format}")
-    if jpeg_quality is not None:
-        print(f"JPEG quality: {jpeg_quality}")
-    print(f"Output folder: {session_dir}")
-    print("\nPress ESC at any time to cancel.")
-    input("\nPosition the reader and press ENTER to start...")
 
     cancelled = False
 
@@ -865,6 +1226,12 @@ def run_capture(profile, width, height):
         escape_listener.stop()
         escape_listener.join(timeout=1)
 
+    # The reader was left in the foreground during capture. Restore the
+    # console before showing completion details or asking post-capture questions.
+    if not bring_console_to_front():
+        time.sleep(0.2)
+        bring_console_to_front()
+
     LOGGER.info(
         "Capture finished: %d/%d screenshots in %s", len(image_paths), total_pages, session_dir
     )
@@ -899,18 +1266,22 @@ def run_capture(profile, width, height):
             )
 
             if not keep_images:
-                try:
-                    for path in image_paths:
-                        os.remove(path)
-
+                if delete_screenshots(image_paths, session_dir):
                     print("Screenshot images deleted; PDF retained.")
-                except Exception as exc:
-                    print(f"Could not delete all screenshots: {exc}")
         else:
             print("Screenshots have been retained because PDF creation failed.")
 
     else:
-        print("PDF not created. Screenshots have been retained.")
+        print("PDF not created.")
+        keep_images = ask_yes_no(
+            "Keep the original screenshot files?",
+            default=bool(APP_SETTINGS.get("keep_screenshots", True)),
+        )
+
+        if not keep_images and delete_screenshots(image_paths, session_dir):
+            print("Screenshot images and session folder deleted.")
+        elif keep_images:
+            print("Screenshots have been retained.")
 
     print(f"\nSession saved in: {session_dir}")
 
@@ -936,13 +1307,13 @@ def main():
         print("\n1. Start a capture")
         print("2. Exit")
 
-        choice = input("\nSelect [1/2]: ").strip()
+        choice = read_console_input("\nSelect [1/2] (ESC to exit): ")
 
-        if choice == "2":
+        if choice is None or choice.strip() == "2":
             print("Goodbye.")
             break
 
-        if choice != "1":
+        if choice.strip() != "1":
             print("Invalid selection.")
             continue
 
@@ -957,11 +1328,20 @@ def main():
             continue
 
         try:
-            run_capture(profile, width, height)
+            while profile is not None:
+                result = run_capture(profile, width, height)
+                if result != "reader_config":
+                    break
+                profile = choose_profile(width, height)
         except KeyboardInterrupt:
             print("\nOperation interrupted.")
         except Exception as exc:
             LOGGER.exception("Unexpected capture workflow error: %s", exc)
             print(f"\nUnexpected error: {exc}")
+
+        # ESC from the reader-configuration menu already means Back to the
+        # main menu. Do not block there with an extra Enter-only prompt.
+        if profile is None:
+            continue
 
         input("\nPress ENTER to return to the main menu...")
