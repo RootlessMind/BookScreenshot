@@ -6,21 +6,32 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-26
+
+### Added
+- Added the option to keep or delete captured screenshots when PDF generation is declined.
+
+### Fixed
+- Fixed ESC-based backward navigation throughout the supported capture setup workflow.
+- Improved focus restoration between the reader application and the console.
+
 ## [0.1.0] - 2026-11-25
 
 ### Added
 - Initial public Alpha release.
-- Automated page screenshot capture.
-- Configurable capture settings.
+- Automated book-page screenshot capture.
+- Configurable capture settings, including page count, capture delays, cropping, image format, image quality, and excluded areas.
+- Configurable pause intervals during capture operations.
 - Batch-based screenshot organization.
-- PDF generation, supporting both separate batch PDFs and a combined PDF.
-- Application configuration and logging.
+- PDF generation from captured screenshots.
+- JSON configuration and reusable profiles.
+- Application logging.
+- Application icon.
 - Standalone Windows executable.
 
 ### Changed
 - Improved application startup and error handling.
 - Improved logging initialization and error reporting.
-- Added application icon.
 
 ### Notes
 - This is an early Alpha release.

@@ -1,7 +1,8 @@
 # BookScreenshot
-You can download BookScreenshot.v0.1.0.Alpha.exe below. No Python installation is required to run the standalone executable.
 
-[![Version](https://img.shields.io/badge/version-0.1.0%20Alpha-blue)](https://github.com/RootlessMind/BookScreenshot/releases/tag/v0.1.0)
+Download the latest release from the [Releases page](https://github.com/RootlessMind/BookScreenshot/releases). The standalone Windows executable does not require a separate Python installation.
+
+[![Version](https://img.shields.io/badge/version-0.1.1%20Alpha-blue)](https://github.com/RootlessMind/BookScreenshot/releases/tag/v0.1.1)
 
 **A customizable screenshot automation tool for capturing pages, organizing batches, and generating PDFs.**
 
@@ -15,10 +16,15 @@ BookScreenshot is currently in **Alpha development**. The existing capture workf
 
 The current version includes:
 
-- **Book Capture:** An existing automated page-capture workflow.
-- **Automated Screenshots:** Capture pages using configurable capture settings.
+- **Book Capture:** An automated workflow for capturing pages.
+- **Configurable Capture:** Configure capture settings before starting an operation.
+- **Image Configuration:** Configure screenshot formats, image quality, cropping, and excluded areas.
+- **Keyboard Navigation:** Use ESC to navigate backward through supported setup steps.
+- **Focus Management:** Improved focus restoration between the reader application and the console.
+- **Capture Pause Intervals:** Pause an operation after a user-defined number of screenshots and resume it.
 - **PDF Generation:** Convert captured screenshots into PDF documents.
-- **Configuration Management:** A foundation for loading and saving application settings.
+- **Screenshot Retention:** Choose whether to keep or delete captured screenshots after PDF generation or when PDF creation is declined.
+- **Reusable Profiles:** Save and reuse settings through JSON configuration profiles.
 - **Logging:** Application logging for troubleshooting and diagnosing errors.
 - **Modular Architecture:** A package structure designed to support future functionality.
 
@@ -30,13 +36,11 @@ The following functionality is planned for future releases:
 
 - **General Screenshot:** Capture full screens, individual monitors, selected regions, windows, and client areas.
 - **Batch Management:** Organize screenshots into sequential batches with configurable naming and storage options.
-- **Pause & Resume:** Pause, resume, cancel, or retry capture operations.
+- **Interrupted Capture Recovery:** Offer the option to resume or cancel an operation stopped using ESC or the corner fail-safe.
 - **Session Recovery:** Save unfinished jobs and resume them after restarting the application.
 - **PDF Organization:** Generate individual PDFs for each batch and one combined PDF.
-- **Image Configuration:** Configure screenshot formats, image quality, cropping, and excluded areas.
-- **Custom Shortcuts:** Customize keyboard shortcuts.
-- **Reusable Profiles:** Save settings and configurations as JSON profiles.
 - **Simple and Advanced Modes:** Provide both an accessible interface and detailed configuration options.
+- **Custom Shortcuts:** Customize keyboard shortcuts.
 
 ## 🖥️ Operating Modes
 
@@ -73,6 +77,12 @@ These modules are planned and are not currently available.
 - Windows 10 or Windows 11
 - Python 3.13 or newer
 - Git (to clone the repository)
+
+### Downloading the Application
+
+The standalone Windows executable is available from the [GitHub Releases page](https://github.com/RootlessMind/BookScreenshot/releases).
+
+No Python installation is required to run the standalone executable.
 
 ### Running from Source
 
@@ -111,26 +121,47 @@ The editable installation is useful for development because changes to the sourc
 
 ## 🔨 Building
 
-A standalone Windows executable is planned for distribution using PyInstaller.
+BookScreenshot uses PyInstaller to create a standalone Windows executable.
 
-Build instructions will be added once the packaging configuration has been tested and finalized.
+Install the development dependencies:
+
+```powershell
+py -m pip install -e ".[dev]"
+```
+
+Install PyInstaller:
+
+```powershell
+py -m pip install pyinstaller
+```
+
+Build the executable using the project's specification file:
+
+```powershell
+py -m PyInstaller --clean --noconfirm BookScreenshot.spec
+```
+
+The resulting executable will be available at:
+
+```text
+dist\BookScreenshot.exe
+```
+
+The specification file defines the executable name, application icon, console mode, entry point, and required hidden imports.
 
 ## 📚 Capture Workflow
 
-The current release retains the existing capture workflow.
+The current capture workflow supports configurable page counts, capture delays, cropping, image formats, image quality, and excluded areas.
 
-Future versions aim to provide a more flexible workflow that will allow users to:
+Users can configure an automatic pause after a specified number of screenshots and resume the operation.
 
-1. Configure the number of pages to capture.
-2. Set capture delays and automatic pause intervals.
-3. Configure cropping, image format, and quality.
-4. Start, pause, resume, or cancel a capture session.
-5. Automatically save progress throughout an operation.
-6. Continue an existing session or save it for later.
-7. Generate separate PDFs for individual batches.
-8. Generate one combined PDF containing all captured pages.
+A remaining issue is that operations stopped using ESC or the corner fail-safe cannot currently be resumed. Future versions will offer the choice to resume or cancel these interrupted operations.
 
-Additional workflow improvements will include the ability to reuse an existing configuration, modify job settings, save sessions, and return to the main menu.
+Further workflow improvements are planned:
+
+- Save unfinished operations and restore them after restarting the application.
+- Improve batch management and PDF organization.
+- Allow users to repeat operations while reusing or modifying previous settings.
 
 ## 🛣️ Roadmap
 
@@ -138,24 +169,27 @@ BookScreenshot is an evolving project. The roadmap below outlines the planned de
 
 - [x] Initial modular application structure
 - [x] Existing book-capture workflow integration
-- [x] Configuration management foundation
+- [x] Configuration management and JSON reusable profiles
+- [x] Configurable image settings, including format, quality, cropping, and excluded areas
 - [x] Centralized application paths
 - [x] Application logging
 - [x] Initial configuration manager tests
+- [x] Improved capture setup navigation and focus restoration
+- [x] Standalone Windows executable
+- [x] Configurable capture pause intervals
 - [ ] New capture interface
 - [ ] General screenshot functionality
 - [ ] Simple and Advanced modes
 - [ ] Configurable keyboard shortcuts
 - [ ] Batch management and sequential naming
-- [ ] Pause, resume, cancel, and retry functionality
+- [ ] Resume or cancel operations stopped using ESC or the corner fail-safe
 - [ ] Persistent sessions and resume-later support
 - [ ] Enhanced PDF generation and organization
-- [ ] JSON configuration and reusable profiles
+- [ ] Repeat operations with reusable or modifiable settings
 - [ ] Optional OCR module
 - [ ] Optional image-processing module
 - [ ] Optional remote-monitoring module
-- [ ] Portable Windows executable
-- [ ] Documentation and user guides
+- [ ] Expanded documentation and user guides
 
 ## 🤝 Contributing
 
