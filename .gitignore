@@ -31,6 +31,7 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!BookScreenshot.spec
 
 # Installer logs
 pip-log.txt
@@ -282,4 +283,3 @@ $RECYCLE.BIN/
 
 # Runtime configuration
 /config/
-BookScreenshot.spec
