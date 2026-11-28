@@ -90,7 +90,6 @@ Clone the repository:
 
 ```powershell
 git clone https://github.com/RootlessMind/BookScreenshot.git
-Screenshot
 ```
 ```powershell
 cd BookScreenshot
